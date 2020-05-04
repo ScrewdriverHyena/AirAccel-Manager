@@ -134,20 +134,20 @@ void SDK_Init()
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
 	DHookEnableDetour(g_hTryPlayerMove, false, TryPlayerMove);
 	
-	PrintToChatAll("Enabled Detour");
+	//PrintToChatAll("Enabled Detour");
 }
 
 public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
 {
-	PrintToChatAll("TryPlayerMove");
+	//PrintToChatAll("TryPlayerMove");
 	
 	if (!g_bGotMovement)
 	{
-		PrintToChatAll("Attempting AA");
+		//PrintToChatAll("Attempting AA");
 		g_bGotMovement = true;
 		DHookRaw(g_hAirAccelerate, false, view_as<Address>(CGameMovement(pThis)));
 		
-		PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
+		//PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
 		RequestFrame(TryPlayerMovePost);
 	}
 	return MRES_Ignored;
