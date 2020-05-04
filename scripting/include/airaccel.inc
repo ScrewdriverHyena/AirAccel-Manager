@@ -7,13 +7,11 @@
 #endif
 #define _my_library_included
 
-
 native void SetClientAirAcceleration(int iClient, float flValue);
 
 native float GetClientAirAcceleration(int iClient);
 
-
-public SharedPlugin __pl_my_library =
+public SharedPlugin __pl_airaccel =
 {
 	name = "airaccel",
 	file = "airaccel.smx",
