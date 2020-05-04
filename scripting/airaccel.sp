@@ -63,8 +63,8 @@ public Plugin myinfo =
 
 public APLRes AskPluginLoad2()
 {
-	CreateNative("SetPlayerAirAcceleration", Native_SetAirAccel);
-	CreateNative("GetPlayerAirAcceleration", Native_GetAirAccel);
+	CreateNative("SetClientAirAcceleration", Native_SetAirAccel);
+	CreateNative("GetClientAirAcceleration", Native_GetAirAccel);
 	RegPluginLibrary("airaccel");
 }
 
@@ -124,31 +124,51 @@ void SDK_Init()
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
 	
 	DHookEnableDetour(g_hTryPlayerMove, false, TryPlayerMove);
+	PrintToChatAll("Enabled Detour");
 }
 
 public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
 {
-	if (g_bGotMovement)
-		return MRES_Supercede;
+	PrintToChatAll("TryPlayerMove");
 	
-	g_bGotMovement = true;
-	g_pGameMovement = CGameMovement(pThis);
-	
-	g_hAirAccelerate = DHookCreate(g_iOffsAirAccelerate, HookType_Raw, ReturnType_Void, ThisPointer_Address, AirAccelerate);
-	DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
-	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-	DHookRaw(g_hAirAccelerate, false, view_as<Address>(g_pGameMovement));
-	return MRES_Supercede;
+	if (!g_bGotMovement)
+	{
+		PrintToChatAll("Attempting AA");
+		g_bGotMovement = true;
+		g_pGameMovement = CGameMovement(pThis);
+		g_hAirAccelerate = DHookCreate(g_iOffsAirAccelerate, HookType_Raw, ReturnType_Void, ThisPointer_Address, AirAccelerate);
+		DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
+		DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+		DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+		DHookRaw(g_hAirAccelerate, false, view_as<Address>(g_pGameMovement));
+		
+		PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
+		RequestFrame(TryPlayerMovePost);
+	}
+	return MRES_Ignored;
 }
 
+public void TryPlayerMovePost(any aData)
+{
+	DHookDisableDetour(g_hTryPlayerMove, false, TryPlayerMove);
+}
+
+float wishdir[3];
 public MRESReturn AirAccelerate(Address pThis, Handle hParams)
 {
 	if (!g_cvarEnable.IntValue)
-		return MRES_Supercede;
+		return MRES_Ignored;
 	
+	PrintToChatAll("AA %d", g_iOffsAirAccelerate);
+	PrintToChatAll("%N %.2f %.2f", g_pGameMovement.player, view_as<float>(DHookGetParam(hParams, 3)), g_flAirAccel[g_pGameMovement.player]);
+	
+	
+	//DHookGetParamVector(hParams, 1, wishdir);
+	//PrintToChatAll("%.2f %.2f %.2f", wishdir[0], wishdir[1], wishdir[2]);
+	//DHookSetParamVector(hParams, 1, wishdir);
+	DHookSetParam(hParams, 2, view_as<float>(DHookGetParam(hParams, 2)));
 	DHookSetParam(hParams, 3, g_flAirAccel[g_pGameMovement.player]);
-	return MRES_ChangedOverride;
+	return MRES_ChangedHandled;
 }
 
 public Action Command_SetAirAcceleration(int iClient, int iArgs)
