@@ -81,7 +81,8 @@ public void OnPluginStart()
 	for (int i = 1; i < MaxClients; i++)
 		g_flAirAccel[i] = flStockAirAccel;
 	
-	g_cvarEnable = CreateConVar("sm_airaccel_enable", "1", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
+	CreateConVar("airaccel_version", PLUGIN_VERSION, "Plugin Version", FCVAR_ARCHIVE);
+	g_cvarEnable = CreateConVar("airaccel_enable", "1", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
 	
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
 	
