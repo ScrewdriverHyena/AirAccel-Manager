@@ -4,7 +4,7 @@
 #define PLUGIN_NAME           "Air-Accel Manager"
 #define PLUGIN_AUTHOR         "Screwdriver (Jon S.)"
 #define PLUGIN_DESCRIPTION    "Add the ability to set air acceleration per player"
-#define PLUGIN_VERSION        "1.0"
+#define PLUGIN_VERSION        "2.0"
 #define PLUGIN_URL            "parkour.tf"
 
 #include <sourcemod>
@@ -20,14 +20,11 @@ GameData g_hGamedata;
 Handle g_hAirAccelerate;
 Handle g_hTryPlayerMove;
 Handle g_hGetBaseEntity;
-//Handle g_hProcessMovement;
-//Handle g_hProcessMovementPost;
 
 ConVar g_cvarEnable;
+ConVar g_cvarAirAcceleration;
 
-//int g_iOffsProcessMovement = -1;
 int g_iOffsAirAccelerate = -1;
-//int g_iCurrentPlayer = -1;
 
 float g_flAirAccel[MAXPLAYERS + 1] = {10.0, 10.0, ...};
 
@@ -76,8 +73,10 @@ public void OnPluginStart()
 	if (GetEngineVersion() != Engine_TF2)
 		SetFailState("[AIRACCEL] ERROR: This plugin is currently only compatible with Team Fortress 2.");
 	
+	g_cvarAirAcceleration = FindConVar("sv_airaccelerate");
+	
 	// Set the default air accelerate values to match those of the cvar
-	float flStockAirAccel = FindConVar("sv_airaccelerate").FloatValue;
+	float flStockAirAccel = g_cvarAirAcceleration.FloatValue;
 	for (int i = 1; i < MaxClients; i++)
 		g_flAirAccel[i] = flStockAirAccel;
 	
@@ -87,6 +86,16 @@ public void OnPluginStart()
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
 	
 	SDK_Init();
+}
+
+public void OnClientDisconnect(int iClient)
+{
+	SetPlayerAirAccel(iClient, g_cvarAirAcceleration.FloatValue);
+}
+
+public void OnClientPostAdminCheck(int iClient)
+{
+	SetPlayerAirAccel(iClient, g_cvarAirAcceleration.FloatValue);
 }
 
 void SDK_Init()
@@ -188,7 +197,11 @@ public Action Command_SetAirAcceleration(int iClient, int iArgs)
 
 public any Native_SetAirAccel(Handle hPlugin, int iNumParams)
 {
-	SetPlayerAirAccel(GetNativeCell(1), GetNativeCell(2));
+	int iClient = GetNativeCell(1);
+	if (!IsClientInGame(iClient))
+		return;
+	
+	SetPlayerAirAccel(iClient, GetNativeCell(2));
 }
 
 public any Native_GetAirAccel(Handle hPlugin, int iNumParams)
