@@ -50,8 +50,6 @@ methodmap CGameMovement
 	}
 }
 
-CGameMovement g_pGameMovement;
-
 public Plugin myinfo =
 {
 	name = PLUGIN_NAME,
@@ -88,6 +86,13 @@ public void OnPluginStart()
 	SDK_Init();
 }
 
+public void OnMapStart()
+{
+	float flStockAirAccel = g_cvarAirAcceleration.FloatValue;
+	for (int i = 1; i < MaxClients; i++)
+		g_flAirAccel[i] = flStockAirAccel;
+}
+
 public void OnClientDisconnect(int iClient)
 {
 	SetPlayerAirAccel(iClient, g_cvarAirAcceleration.FloatValue);
@@ -119,11 +124,16 @@ void SDK_Init()
 
 	g_hTryPlayerMove = DHookCreateDetour(Address_Null, CallConv_THISCALL, ReturnType_Int, ThisPointer_Address);
 	
+	g_hAirAccelerate = DHookCreate(g_iOffsAirAccelerate, HookType_Raw, ReturnType_Void, ThisPointer_Address, AirAccelerate);
+	DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
+	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+	
 	DHookSetFromConf(g_hTryPlayerMove, g_hGamedata, SDKConf_Signature, "CGameMovement::TryPlayerMove");
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
-	
 	DHookEnableDetour(g_hTryPlayerMove, false, TryPlayerMove);
+	
 	PrintToChatAll("Enabled Detour");
 }
 
@@ -135,12 +145,7 @@ public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
 	{
 		PrintToChatAll("Attempting AA");
 		g_bGotMovement = true;
-		g_pGameMovement = CGameMovement(pThis);
-		g_hAirAccelerate = DHookCreate(g_iOffsAirAccelerate, HookType_Raw, ReturnType_Void, ThisPointer_Address, AirAccelerate);
-		DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
-		DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-		DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-		DHookRaw(g_hAirAccelerate, false, view_as<Address>(g_pGameMovement));
+		DHookRaw(g_hAirAccelerate, false, view_as<Address>(CGameMovement(pThis)));
 		
 		PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
 		RequestFrame(TryPlayerMovePost);
@@ -153,21 +158,12 @@ public void TryPlayerMovePost(any aData)
 	DHookDisableDetour(g_hTryPlayerMove, false, TryPlayerMove);
 }
 
-float wishdir[3];
 public MRESReturn AirAccelerate(Address pThis, Handle hParams)
 {
 	if (!g_cvarEnable.IntValue)
 		return MRES_Ignored;
 	
-	PrintToChatAll("AA %d", g_iOffsAirAccelerate);
-	PrintToChatAll("%N %.2f %.2f", g_pGameMovement.player, view_as<float>(DHookGetParam(hParams, 3)), g_flAirAccel[g_pGameMovement.player]);
-	
-	
-	//DHookGetParamVector(hParams, 1, wishdir);
-	//PrintToChatAll("%.2f %.2f %.2f", wishdir[0], wishdir[1], wishdir[2]);
-	//DHookSetParamVector(hParams, 1, wishdir);
-	DHookSetParam(hParams, 2, view_as<float>(DHookGetParam(hParams, 2)));
-	DHookSetParam(hParams, 3, g_flAirAccel[g_pGameMovement.player]);
+	DHookSetParam(hParams, 3, g_flAirAccel[CGameMovement(pThis).player]);
 	return MRES_ChangedHandled;
 }
 
