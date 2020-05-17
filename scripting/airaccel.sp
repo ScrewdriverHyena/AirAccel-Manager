@@ -17,16 +17,18 @@
 
 GameData g_hGamedata;
 
-Handle g_hAirAccelerate;
+Handle g_hProcessMovement;
+Handle g_hProcessMovementPost;
 Handle g_hTryPlayerMove;
 Handle g_hGetBaseEntity;
 
 ConVar g_cvarEnable;
 ConVar g_cvarAirAcceleration;
 
-int g_iOffsAirAccelerate = -1;
+int g_iProcessMovement = -1;
 
 float g_flAirAccel[MAXPLAYERS + 1] = {10.0, 10.0, ...};
+float g_flStockAirAccel;
 
 bool g_bGotMovement = false;
 
@@ -72,18 +74,31 @@ public void OnPluginStart()
 		SetFailState("[AIRACCEL] ERROR: This plugin is currently only compatible with Team Fortress 2.");
 	
 	g_cvarAirAcceleration = FindConVar("sv_airaccelerate");
+	g_cvarAirAcceleration.AddChangeHook(OnChangeAirAccel);
 	
 	// Set the default air accelerate values to match those of the cvar
-	float flStockAirAccel = g_cvarAirAcceleration.FloatValue;
+	g_flStockAirAccel = g_cvarAirAcceleration.FloatValue;
 	for (int i = 1; i < MaxClients; i++)
-		g_flAirAccel[i] = flStockAirAccel;
+		g_flAirAccel[i] = g_flStockAirAccel;
 	
 	CreateConVar("airaccel_version", PLUGIN_VERSION, "Plugin Version", FCVAR_ARCHIVE);
-	g_cvarEnable = CreateConVar("airaccel_enable", "1", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
+	g_cvarEnable = CreateConVar("airaccel_enable", "0", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
 	
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
 	
 	SDK_Init();
+}
+
+public void OnChangeAirAccel(ConVar cvarAirAccel, const char[] strOldValue, const char[] strNewValue)
+{
+	g_flStockAirAccel = StringToFloat(strNewValue);
+	float flOldValue = StringToFloat(strOldValue);
+	
+	for (int i = 1; i < MaxClients; i++)
+	{
+		if (g_flAirAccel[i] == flOldValue)
+			g_flAirAccel[i] = g_flStockAirAccel;
+	}
 }
 
 public void OnMapStart()
@@ -109,10 +124,6 @@ void SDK_Init()
 	if (g_hGamedata == null)
 		ThrowError("[AIRACCEL] Can't find gamedata file airaccel.txt");
 	
-	g_iOffsAirAccelerate = g_hGamedata.GetOffset("CGameMovement::AirAccelerate");
-	if (g_iOffsAirAccelerate == -1)
-		ThrowError("[AIRACCEL] Can't find offset for function CGameMovement::AirAccelerate");
-	
 	StartPrepSDKCall(SDKCall_Raw);
 	PrepSDKCall_SetFromConf(g_hGamedata, SDKConf_Virtual, "CBaseEntity::GetBaseEntity");
 	PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
@@ -121,14 +132,20 @@ void SDK_Init()
 	char strBuf[4];
 	g_hGamedata.GetKeyValue("CGameMovement::player", strBuf, sizeof(strBuf));
 	offsets.player = StringToInt(strBuf);
-
+	
+	g_iProcessMovement = GameConfGetOffset(g_hGamedata, "CTFGameMovement::ProcessMovement");
+	if (g_iProcessMovement == -1)
+		ThrowError("Can't find offset for function CTFGameMovement::ProcessMovement");
+	
+	g_hProcessMovement = DHookCreate(g_iProcessMovement, HookType_Raw, ReturnType_Void, ThisPointer_Address, ProcessMovement);
+	DHookAddParam(g_hProcessMovement, HookParamType_CBaseEntity);
+	DHookAddParam(g_hProcessMovement, HookParamType_ObjectPtr);
+	
+	g_hProcessMovementPost = DHookCreate(g_iProcessMovement, HookType_Raw, ReturnType_Void, ThisPointer_Address, ProcessMovementPost);
+	DHookAddParam(g_hProcessMovementPost, HookParamType_CBaseEntity);
+	DHookAddParam(g_hProcessMovementPost, HookParamType_ObjectPtr);
+	
 	g_hTryPlayerMove = DHookCreateDetour(Address_Null, CallConv_THISCALL, ReturnType_Int, ThisPointer_Address);
-	
-	g_hAirAccelerate = DHookCreate(g_iOffsAirAccelerate, HookType_Raw, ReturnType_Void, ThisPointer_Address, AirAccelerate);
-	DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
-	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
-	
 	DHookSetFromConf(g_hTryPlayerMove, g_hGamedata, SDKConf_Signature, "CGameMovement::TryPlayerMove");
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
 	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
@@ -145,11 +162,13 @@ public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
 	{
 		//PrintToChatAll("Attempting AA");
 		g_bGotMovement = true;
-		DHookRaw(g_hAirAccelerate, false, view_as<Address>(CGameMovement(pThis)));
+		DHookRaw(g_hProcessMovement, false, pThis);
+		DHookRaw(g_hProcessMovementPost, false, pThis);
 		
 		//PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
 		RequestFrame(TryPlayerMovePost);
 	}
+	
 	return MRES_Ignored;
 }
 
@@ -158,12 +177,23 @@ public void TryPlayerMovePost(any aData)
 	DHookDisableDetour(g_hTryPlayerMove, false, TryPlayerMove);
 }
 
-public MRESReturn AirAccelerate(Address pThis, Handle hParams)
+public MRESReturn ProcessMovement(Address pThis, Handle hParams)
 {
 	if (!g_cvarEnable.IntValue)
 		return MRES_Ignored;
 	
-	DHookSetParam(hParams, 3, g_flAirAccel[CGameMovement(pThis).player]);
+	if (g_flAirAccel[view_as<CGameMovement>(pThis).player] != g_flStockAirAccel)
+		g_cvarAirAcceleration.SetFloat(g_flAirAccel[view_as<CGameMovement>(pThis).player]);
+	
+	return MRES_ChangedHandled;
+}
+
+public MRESReturn ProcessMovementPost(Address pThis, Handle hParams)
+{
+	if (!g_cvarEnable.IntValue)
+		return MRES_Ignored;
+	
+	g_cvarAirAcceleration.SetFloat(g_flStockAirAccel);
 	return MRES_ChangedHandled;
 }
 
