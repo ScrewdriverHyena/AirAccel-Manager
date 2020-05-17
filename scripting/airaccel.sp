@@ -4,7 +4,7 @@
 #define PLUGIN_NAME           "Air-Accel Manager"
 #define PLUGIN_AUTHOR         "Screwdriver (Jon S.)"
 #define PLUGIN_DESCRIPTION    "Add the ability to set air acceleration per player"
-#define PLUGIN_VERSION        "2.0"
+#define PLUGIN_VERSION        "3.0"
 #define PLUGIN_URL            "parkour.tf"
 
 #include <sourcemod>
