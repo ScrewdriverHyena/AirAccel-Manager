@@ -30,7 +30,8 @@ int g_iProcessMovement = -1;
 float g_flAirAccel[MAXPLAYERS + 1] = {10.0, 10.0, ...};
 float g_flStockAirAccel;
 
-bool g_bGotMovement = false;
+bool g_bGotMovement;
+bool g_bInProcessMovement;
 
 enum struct CTFGameMovementOffsets
 {
@@ -82,7 +83,7 @@ public void OnPluginStart()
 		g_flAirAccel[i] = g_flStockAirAccel;
 	
 	CreateConVar("airaccel_version", PLUGIN_VERSION, "Plugin Version", FCVAR_ARCHIVE);
-	g_cvarEnable = CreateConVar("airaccel_enable", "0", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
+	g_cvarEnable = CreateConVar("airaccel_enable", "1", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
 	
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
 	
@@ -91,6 +92,9 @@ public void OnPluginStart()
 
 public void OnChangeAirAccel(ConVar cvarAirAccel, const char[] strOldValue, const char[] strNewValue)
 {
+	if (g_bInProcessMovement)
+		return;
+	
 	g_flStockAirAccel = StringToFloat(strNewValue);
 	float flOldValue = StringToFloat(strOldValue);
 	
@@ -183,7 +187,10 @@ public MRESReturn ProcessMovement(Address pThis, Handle hParams)
 		return MRES_Ignored;
 	
 	if (g_flAirAccel[view_as<CGameMovement>(pThis).player] != g_flStockAirAccel)
+	{
+		g_bInProcessMovement = true;
 		g_cvarAirAcceleration.SetFloat(g_flAirAccel[view_as<CGameMovement>(pThis).player]);
+	}
 	
 	return MRES_ChangedHandled;
 }
@@ -194,6 +201,7 @@ public MRESReturn ProcessMovementPost(Address pThis, Handle hParams)
 		return MRES_Ignored;
 	
 	g_cvarAirAcceleration.SetFloat(g_flStockAirAccel);
+	g_bInProcessMovement = false;
 	return MRES_ChangedHandled;
 }
 
@@ -265,3 +273,9 @@ float GetPlayerAirAccel(int iClient)
 	return g_flAirAccel[iClient];
 }
 
+public Action Event_ServerCvar(Event hEvent, const char[] strName, bool bDontBroadcast)
+{
+	char strConVarName[64];
+	GetEventString(hEvent, "cvarname", strConVarName, sizeof(strConVarName));
+	return (StrEqual(strConVarName, "sv_airaccelerate")) ? Plugin_Handled : Plugin_Continue;
+}
