@@ -84,6 +84,7 @@ public void OnPluginStart()
 	
 	CreateConVar("airaccel_version", PLUGIN_VERSION, "Plugin Version", FCVAR_ARCHIVE);
 	g_cvarEnable = CreateConVar("airaccel_enable", "1", "Enable indexing airaccelerate values", _, true, _, true, 1.0);
+	HookEvent("server_cvar", Event_ServerCvar, EventHookMode_Pre);
 	
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
 	
@@ -107,6 +108,7 @@ public void OnChangeAirAccel(ConVar cvarAirAccel, const char[] strOldValue, cons
 
 public void OnMapStart()
 {
+	g_cvarAirAcceleration = FindConVar("sv_airaccelerate");
 	float flStockAirAccel = g_cvarAirAcceleration.FloatValue;
 	for (int i = 1; i < MaxClients; i++)
 		g_flAirAccel[i] = flStockAirAccel;
@@ -167,7 +169,7 @@ public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
 		//PrintToChatAll("Attempting AA");
 		g_bGotMovement = true;
 		DHookRaw(g_hProcessMovement, false, pThis);
-		DHookRaw(g_hProcessMovementPost, false, pThis);
+		DHookRaw(g_hProcessMovementPost, true, pThis);
 		
 		//PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
 		RequestFrame(TryPlayerMovePost);
@@ -276,6 +278,7 @@ float GetPlayerAirAccel(int iClient)
 public Action Event_ServerCvar(Event hEvent, const char[] strName, bool bDontBroadcast)
 {
 	char strConVarName[64];
-	GetEventString(hEvent, "cvarname", strConVarName, sizeof(strConVarName));
-	return (StrEqual(strConVarName, "sv_airaccelerate")) ? Plugin_Handled : Plugin_Continue;
+	hEvent.BroadcastDisabled = true;
+	bDontBroadcast = true;
+	return Plugin_Handled;
 }
