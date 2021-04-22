@@ -17,20 +17,15 @@
 
 GameData g_hGamedata;
 
-Handle g_hProcessMovement;
-Handle g_hProcessMovementPost;
-Handle g_hTryPlayerMove;
 Handle g_hGetBaseEntity;
+Handle g_hAirAccelerate;
 
 ConVar g_cvarEnable;
 ConVar g_cvarAirAcceleration;
 
-int g_iProcessMovement = -1;
-
 float g_flAirAccel[MAXPLAYERS + 1] = {10.0, 10.0, ...};
 float g_flStockAirAccel;
 
-bool g_bGotMovement;
 bool g_bInProcessMovement;
 
 enum struct CTFGameMovementOffsets
@@ -139,72 +134,21 @@ void SDK_Init()
 	g_hGamedata.GetKeyValue("CGameMovement::player", strBuf, sizeof(strBuf));
 	offsets.player = StringToInt(strBuf);
 	
-	g_iProcessMovement = GameConfGetOffset(g_hGamedata, "CTFGameMovement::ProcessMovement");
-	if (g_iProcessMovement == -1)
-		ThrowError("Can't find offset for function CTFGameMovement::ProcessMovement");
-	
-	g_hProcessMovement = DHookCreate(g_iProcessMovement, HookType_Raw, ReturnType_Void, ThisPointer_Address, ProcessMovement);
-	DHookAddParam(g_hProcessMovement, HookParamType_CBaseEntity);
-	DHookAddParam(g_hProcessMovement, HookParamType_ObjectPtr);
-	
-	g_hProcessMovementPost = DHookCreate(g_iProcessMovement, HookType_Raw, ReturnType_Void, ThisPointer_Address, ProcessMovementPost);
-	DHookAddParam(g_hProcessMovementPost, HookParamType_CBaseEntity);
-	DHookAddParam(g_hProcessMovementPost, HookParamType_ObjectPtr);
-	
-	g_hTryPlayerMove = DHookCreateDetour(Address_Null, CallConv_THISCALL, ReturnType_Int, ThisPointer_Address);
-	DHookSetFromConf(g_hTryPlayerMove, g_hGamedata, SDKConf_Signature, "CGameMovement::TryPlayerMove");
-	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
-	DHookAddParam(g_hTryPlayerMove, HookParamType_Int);
-	DHookEnableDetour(g_hTryPlayerMove, false, TryPlayerMove);
-	
-	//PrintToChatAll("Enabled Detour");
+	g_hAirAccelerate = DHookCreateDetour(Address_Null, CallConv_THISCALL, ReturnType_Void, ThisPointer_Address);
+	DHookSetFromConf(g_hAirAccelerate, g_hGamedata, SDKConf_Signature, "CGameMovement::AirAccelerate");
+	DHookAddParam(g_hAirAccelerate, HookParamType_VectorPtr);
+	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+	DHookAddParam(g_hAirAccelerate, HookParamType_Float);
+	DHookEnableDetour(g_hAirAccelerate, false, AirAccelerate);
 }
 
-public MRESReturn TryPlayerMove(Address pThis, Handle hReturn, Handle hParams)
+public MRESReturn AirAccelerate(Address pThis, Handle hParams)
 {
-	//PrintToChatAll("TryPlayerMove");
-	
-	if (!g_bGotMovement)
-	{
-		//PrintToChatAll("Attempting AA");
-		g_bGotMovement = true;
-		DHookRaw(g_hProcessMovement, false, pThis);
-		DHookRaw(g_hProcessMovementPost, true, pThis);
-		
-		//PrintToChatAll("Hooked AA %d", g_iOffsAirAccelerate);
-		RequestFrame(TryPlayerMovePost);
-	}
-	
-	return MRES_Ignored;
-}
-
-public void TryPlayerMovePost(any aData)
-{
-	DHookDisableDetour(g_hTryPlayerMove, false, TryPlayerMove);
-}
-
-public MRESReturn ProcessMovement(Address pThis, Handle hParams)
-{
-	if (!g_cvarEnable.IntValue)
+	if (!g_cvarEnable.BoolValue)
 		return MRES_Ignored;
 	
-	if (g_flAirAccel[view_as<CGameMovement>(pThis).player] != g_flStockAirAccel)
-	{
-		g_bInProcessMovement = true;
-		g_cvarAirAcceleration.SetFloat(g_flAirAccel[view_as<CGameMovement>(pThis).player]);
-	}
-	
-	return MRES_ChangedHandled;
-}
-
-public MRESReturn ProcessMovementPost(Address pThis, Handle hParams)
-{
-	if (!g_cvarEnable.IntValue)
-		return MRES_Ignored;
-	
-	g_cvarAirAcceleration.SetFloat(g_flStockAirAccel);
-	g_bInProcessMovement = false;
-	return MRES_ChangedHandled;
+	DHookSetParam(hParams, 3, g_flAirAccel[view_as<CGameMovement>(pThis).player]);
+	return MRES_ChangedOverride;
 }
 
 public Action Command_SetAirAcceleration(int iClient, int iArgs)
@@ -215,39 +159,30 @@ public Action Command_SetAirAcceleration(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 	
-	char strName[32], strValue[8];
-	int iTarget = -1;
+	char strTarget[32], strTargetName[MAX_TARGET_LENGTH], strValue[8];
 	float flValue;
-	GetCmdArg(1, strName, sizeof(strName));
+	bool bTN_is_ml;
+	int iTargets[MAXPLAYERS], iTargetCount;
+	GetCmdArg(1, strTarget, sizeof(strTarget));
 	GetCmdArg(2, strValue, sizeof(strValue));
 	flValue = StringToFloat(strValue);
-	
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (!IsClientConnected(i))
-			continue;
-		
-		char strOther[32];
-		GetClientName(i, strOther, sizeof(strOther));
-		
-		if (StrEqual(strName, strOther))
-			iTarget = i;
-	}
-	
-	if (iTarget == -1)
-	{
-		ReplyToCommand(iClient, "Could not find specified user.");
-		return Plugin_Handled;
-	}
-	
 	if (flValue <= 0.0)
 	{
 		ReplyToCommand(iClient, "Invalid air acceleration value.");
 		return Plugin_Handled;
 	}
 	
-	SetPlayerAirAccel(iTarget, flValue);
-	ReplyToCommand(iClient, "Set %N's airaccelerate to %.2f.", iTarget, flValue);
+	iTargetCount = ProcessTargetString(strTarget, iClient, iTargets, MAXPLAYERS, COMMAND_FILTER_NO_IMMUNITY, strTargetName, MAX_TARGET_LENGTH, bTN_is_ml);
+	
+	for (int i = 0; i < iTargetCount; i++)
+	{
+		if (!IsValidClient(iTargets[i]))
+			continue;
+		
+		SetPlayerAirAccel(iTargets[i], flValue);
+		ReplyToCommand(iClient, "Set %N's airaccelerate to %.2f.", iTargets[i], flValue);
+	}
+	
 	return Plugin_Handled;
 }
 
@@ -277,8 +212,16 @@ float GetPlayerAirAccel(int iClient)
 
 public Action Event_ServerCvar(Event hEvent, const char[] strName, bool bDontBroadcast)
 {
-	char strConVarName[64];
 	hEvent.BroadcastDisabled = true;
 	bDontBroadcast = true;
 	return Plugin_Handled;
+}
+
+bool IsValidClient(int iClient, bool bAllowBots = false)
+{
+	return !(!(1 <= iClient <= MaxClients) 
+			|| !IsClientInGame(iClient) 
+			|| (IsFakeClient(iClient) && !bAllowBots) 
+			|| IsClientSourceTV(iClient) 
+			|| IsClientReplay(iClient));
 }
