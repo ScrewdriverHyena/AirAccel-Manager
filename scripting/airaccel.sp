@@ -82,7 +82,8 @@ public void OnPluginStart()
 	HookEvent("server_cvar", Event_ServerCvar, EventHookMode_Pre);
 	
 	RegAdminCmd("sm_setairaccel", Command_SetAirAcceleration, ADMFLAG_ROOT, "Set a player's air acceleration");
-	
+	RegAdminCmd("sm_getairaccel", Command_GetAirAcceleration, ADMFLAG_ROOT, "Get a player's air acceleration");
+
 	SDK_Init();
 }
 
@@ -186,6 +187,32 @@ public Action Command_SetAirAcceleration(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+public Action Command_GetAirAcceleration(int iClient, int iArgs)
+{
+	if (iArgs < 1)
+	{
+		ReplyToCommand(iClient, "Usage: sm_getairaccel <target>");
+		return Plugin_Handled;
+	}
+	
+	char strTarget[32], strTargetName[MAX_TARGET_LENGTH];
+	bool bTN_is_ml;
+	int iTargets[MAXPLAYERS], iTargetCount;
+	GetCmdArg(1, strTarget, sizeof(strTarget));
+	
+	iTargetCount = ProcessTargetString(strTarget, iClient, iTargets, MAXPLAYERS, COMMAND_FILTER_NO_IMMUNITY, strTargetName, MAX_TARGET_LENGTH, bTN_is_ml);
+	
+	for (int i = 0; i < iTargetCount; i++)
+	{
+		if (!IsValidClient(iTargets[i]))
+			continue;
+		
+		ReplyToCommand(iClient, "%N Airaccel: %.2f", iTargets[i], GetPlayerAirAccel(iTargets[i]));
+	}
+	
+	return Plugin_Handled;
+}
+
 public any Native_SetAirAccel(Handle hPlugin, int iNumParams)
 {
 	int iClient = GetNativeCell(1);
@@ -202,7 +229,8 @@ public any Native_GetAirAccel(Handle hPlugin, int iNumParams)
 
 void SetPlayerAirAccel(int iClient, float flValue)
 {
-	g_flAirAccel[iClient] = flValue;
+	if (flValue > 0.0)
+		g_flAirAccel[iClient] = flValue;
 }
 
 float GetPlayerAirAccel(int iClient)
