@@ -35,6 +35,11 @@
 				"library"		"server"
 				"linux"		"@_ZN13CGameMovement13AirAccelerateER6Vectorff"
 			}
+			"CGameMovement::Accelerate"
+			{
+				"library"		"server"
+				"linux"		"@_ZN13CGameMovement10AccelerateER6Vectorff"
+			}
 		}
 		"Offsets"
 		{
@@ -52,6 +57,11 @@
 			{
 				"windows"	"16"
 				"linux"	"17"
+			}
+			"CGameMovement::Accelerate"
+			{
+				"windows"	"20"
+				"linux"	"21"
 			}
 			"CTFViewModel::CalcViewModelView"
 			{
