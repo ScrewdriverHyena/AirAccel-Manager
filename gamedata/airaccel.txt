@@ -16,7 +16,7 @@
 				}
 				"linux"
 				{
-					"signature" "CGameMovement::TryPlayerMove"
+					"signature"	"CGameMovement::TryPlayerMove"
 				}
 				"offset" "0"
 			}
@@ -33,11 +33,13 @@
 			"CGameMovement::AirAccelerate"
 			{
 				"library"		"server"
+				"windows"	"\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x46\x04"
 				"linux"		"@_ZN13CGameMovement13AirAccelerateER6Vectorff"
 			}
 			"CGameMovement::Accelerate"
 			{
 				"library"		"server"
+				"windows"	"\x55\x8B\xEC\x56\x8B\xF1\x8B\x06\x8B\x40\x54"
 				"linux"		"@_ZN13CGameMovement10AccelerateER6Vectorff"
 			}
 		}
@@ -48,16 +50,19 @@
 				"windows"	"1"
 				"linux"	"2"
 			}
+
 			"CTFGameMovement::CanUnduck"
 			{
 				"windows"	"50"
 				"linux"	"51"
 			}
+
 			"CGameMovement::AirAccelerate"
 			{
 				"windows"	"16"
 				"linux"	"17"
 			}
+
 			"CGameMovement::Accelerate"
 			{
 				"windows"	"20"
@@ -65,8 +70,8 @@
 			}
 			"CTFViewModel::CalcViewModelView"
 			{
-				"windows"	"223"
-				"linux"	"224"
+				"windows"	"229"
+				"linux"	"230"
 			}
 			"CBaseEntity::GetBaseEntity"
 			{
